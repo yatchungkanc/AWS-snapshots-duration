@@ -6,6 +6,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict
 import csv
 import os
+import sys
+import traceback
 
 def get_efs_snapshots_for_region(region):
     """Get all EFS snapshots for a specific region"""
@@ -194,12 +196,6 @@ def get_ec2_snapshots_for_region(region):
         print(f"Error getting EBS snapshots for region {region}: {e}")
         return []
 
-def get_snapshots_for_region(region):
-    """Get both RDS and EC2 snapshots for a region"""
-    rds_snapshots = get_rds_snapshots_for_region(region)
-    ec2_snapshots = get_ec2_snapshots_for_region(region)
-    return rds_snapshots + ec2_snapshots
-
 def generate_date_ranges(latest_date):
     """Generate date ranges for snapshot grouping"""
     ranges = [
@@ -369,7 +365,7 @@ def export_summary_to_csv(summary, filename):
 
 def main():
     try:
-        print("Collecting RDS and EC2 snapshot information across all regions...")
+        print("Collecting RDS, EC2, and EFS snapshot information across all regions...")
         
         # Get AWS account ID
         sts_client = boto3.client('sts')
@@ -395,6 +391,7 @@ def main():
                     print(f"Completed scanning region: {region}")
                 except Exception as e:
                     print(f"Error processing region {region}: {e}")
+                    traceback.print_exc(file=sys.stdout)
 
         if not all_snapshots:
             print("No snapshots found in any region.")
@@ -514,6 +511,7 @@ def main():
 
     except Exception as e:
         print(f"An error occurred: {str(e)}")
+        traceback.print_exc(file=sys.stdout)
 
 if __name__ == "__main__":
     # Ensure AWS credentials are configured before running
@@ -530,3 +528,4 @@ if __name__ == "__main__":
         print("Error: Unable to validate AWS credentials.")
         print("Please ensure you have configured your AWS credentials correctly.")
         print(f"Error details: {str(e)}")
+        traceback.print_exc(file=sys.stdout)
