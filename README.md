@@ -67,6 +67,18 @@ The script generates a summary of snapshots grouped by service (EFS, RDS, EBS), 
 - Creation time
 - Encryption status
 
+### Sample Outputs
+
+Below are two sample outputs from the AWS Snapshot Inventory Tool:
+
+1. Summary Output
+![Summary Output](summary_output.png)
+This image shows a summary of snapshots across different AWS services, including the total number of snapshots, total size, and distribution across different time ranges.
+
+2. Raw Data CSV
+![Raw Data CSV](raw_data_csv.png)
+This sample output displays the raw data in CSV format, showing detailed information for each snapshot, including service type, region, snapshot ID, source, size, and creation time.
+
 ### Troubleshooting
 
 If you encounter any issues while running the script, consider the following:
