@@ -13,6 +13,7 @@ def get_efs_snapshots_for_region(region):
     """Get all EFS snapshots for a specific region"""
     try:
         efs_client = boto3.client('efs', region_name=region)
+        backup_client = boto3.client('backup', region_name=region)
         snapshots = []
         
         # Get all EFS file systems
@@ -26,36 +27,46 @@ def get_efs_snapshots_for_region(region):
                     fs_name = next((tag['Value'] for tag in fs.get('Tags', []) 
                                  if tag['Key'] == 'Name'), 'N/A')
                     
-                    # Get snapshots for each file system
+                    # Get backup policy for the file system
                     try:
-                        snap_paginator = efs_client.get_paginator('describe_snapshots')
-                        snap_pages = snap_paginator.paginate(FileSystemId=fs_id)
+                        backup_policy = efs_client.describe_backup_policy(
+                            FileSystemId=fs_id
+                        )
                         
-                        for snap_page in snap_pages:
-                            for snapshot in snap_page['Snapshots']:
-                                # Calculate size in GB (EFS reports in bytes)
-                                size_gb = round(snapshot.get('SizeInBytes', {}).get('Value', 0) / (1024**3), 2)
+                        # Get recovery points (snapshots) using AWS Backup
+                        try:
+                            backup_response = backup_client.list_recovery_points_by_resource(
+                                ResourceArn=fs['FileSystemArn']
+                            )
+                            
+                            for recovery_point in backup_response.get('RecoveryPoints', []):
+                                # Calculate size in GB
+                                size_gb = round(recovery_point.get('BackupSizeInBytes', 0) / (1024**3), 2)
                                 
                                 snapshots.append({
                                     'Service': 'EFS',
                                     'Region': region,
-                                    'Type': 'Manual' if snapshot.get('Tags', []) else 'Automated',
-                                    'Snapshot ID': snapshot['SnapshotId'],
+                                    'Type': 'Automated' if recovery_point.get('CreatedBy', '').startswith('aws/backup') else 'Manual',
+                                    'Snapshot ID': recovery_point['RecoveryPointArn'].split('/')[-1],
                                     'Source': fs_id,
                                     'Source Name': fs_name,
                                     'Engine': 'EFS',
                                     'Size (GB)': size_gb,
-                                    'Status': snapshot['Status'],
-                                    'Creation Time': snapshot['CreationTime'],
+                                    'Status': recovery_point.get('Status', 'N/A'),
+                                    'Creation Time': recovery_point['CreationDate'],
                                     'Encrypted': True,  # EFS is always encrypted
-                                    'Description': next((tag['Value'] for tag in snapshot.get('Tags', []) 
-                                                       if tag['Key'] == 'Description'), 'N/A'),
-                                    'LifeCycleState': snapshot.get('LifecycleState', 'N/A'),
-                                    'RestoreProgress': snapshot.get('RestoreProgress', 'N/A'),
+                                    'Description': recovery_point.get('BackupVaultName', 'N/A'),
+                                    'LifeCycleState': recovery_point.get('LifecycleState', 'N/A'),
+                                    'RestoreProgress': 'N/A',
                                     'PerformanceMode': fs.get('PerformanceMode', 'N/A')
                                 })
+                                
+                        except ClientError as e:
+                            print(f"Error getting backup recovery points for EFS {fs_id} in {region}: {e}")
+                            continue
+                            
                     except ClientError as e:
-                        print(f"Error getting snapshots for EFS {fs_id} in {region}: {e}")
+                        print(f"Error getting backup policy for EFS {fs_id} in {region}: {e}")
                         continue
                         
         except ClientError as e:
